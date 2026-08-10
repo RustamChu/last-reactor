@@ -5,7 +5,13 @@
 #
 #  Скрипт сам найдёт Python, поставит pygame и запустит игру.
 # ============================================================
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
+trap {
+    Write-Host ""
+    Write-Host ("  Ошибка: " + $_.Exception.Message) -ForegroundColor Red
+    Read-Host "Нажмите Enter, чтобы закрыть"
+    exit 1
+}
 # в PowerShell 7.3+ вывод в stderr от внешних программ иначе может стать ошибкой
 if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
     $PSNativeCommandUseErrorActionPreference = $false
@@ -45,7 +51,7 @@ foreach ($candidate in @(@("py", "-3"), @("python"), @("python3"))) {
     if ($candidate.Count -gt 1) { $pyArgs = $candidate[1..($candidate.Count - 1)] }
     if (-not (Get-Command $name -ErrorAction SilentlyContinue)) { continue }
     try {
-        $ver = & $name @pyArgs -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
+        $ver = [string](& $name @pyArgs -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>&1 | Select-Object -Last 1)
         if ($LASTEXITCODE -eq 0 -and $ver -match '^3\.(\d+)$' -and [int]$Matches[1] -ge 8) {
             $exe = $name
             $extra = $pyArgs
@@ -71,7 +77,7 @@ if (-not $exe) {
 
 # --- 3. проверяем и при необходимости ставим pygame -----------------------
 Write-Step "Проверяю pygame..."
-& $exe @extra -c "import pygame" 2>$null
+$null = & $exe @extra -c "import pygame" 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Step "Ставлю pygame (один раз, ~10 МБ)..."
     & $exe @extra -m pip install --user --disable-pip-version-check -r requirements.txt
@@ -79,7 +85,7 @@ if ($LASTEXITCODE -ne 0) {
         Write-Step "Не вышло, пробую сборку pygame-ce..."
         & $exe @extra -m pip install --user --disable-pip-version-check pygame-ce
     }
-    & $exe @extra -c "import pygame" 2>$null
+    $null = & $exe @extra -c "import pygame" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Err "pygame поставить не удалось. Проверьте интернет и попробуйте ещё раз."
         Pause-Exit 1

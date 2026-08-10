@@ -6,7 +6,13 @@
 #  сделает коммит и запушит. Повторный запуск просто зальёт
 #  свежие изменения.
 # ============================================================
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
+trap {
+    Write-Host ""
+    Write-Host ("  Ошибка: " + $_.Exception.Message) -ForegroundColor Red
+    Read-Host "Нажмите Enter, чтобы закрыть"
+    exit 1
+}
 if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
     $PSNativeCommandUseErrorActionPreference = $false
 }
@@ -101,7 +107,8 @@ if (git status --porcelain) {
     Write-Ok "Новых изменений нет"
 }
 
-if (-not (git log -1 --oneline 2>$null)) {
+$null = & git log -1 --oneline 2>&1
+if ($LASTEXITCODE -ne 0) {
     Write-Err "Нечего пушить - в репозитории нет ни одного коммита."
     Pause-Exit 1
 }
@@ -117,11 +124,11 @@ if ($hasRemote) {
 }
 
 # --- 5. публикуем ----------------------------------------------------------
-$useGh = [bool](Get-Command gh -ErrorAction SilentlyContinue)
+$useGh = $false   # gh отключён (publish_all_no_gh.ps1)
 
 if ($useGh) {
     Write-Step "Нашёл GitHub CLI - делаю всё автоматически"
-    gh auth status 2>$null | Out-Null
+    $null = & gh auth status 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Step "Нужно войти в GitHub, сейчас откроется браузер..."
         gh auth login --hostname github.com --web
@@ -131,7 +138,7 @@ if ($useGh) {
         }
     }
 
-    gh repo view "$GitHubUser/$RepoName" 2>$null | Out-Null
+    $null = & gh repo view "$GitHubUser/$RepoName" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Step "Создаю репозиторий и заливаю код..."
         if (-not $hasRemote) {
